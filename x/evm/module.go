@@ -2,18 +2,20 @@ package evm
 
 import (
 	"encoding/json"
-	"math/big"
+
+	"github.com/gorilla/mux"
+	"github.com/spf13/cobra"
+
+	abci "github.com/tendermint/tendermint/abci/types"
 
 	"github.com/cosmos/cosmos-sdk/client/context"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
+
 	"github.com/cosmos/ethermint/x/evm/client/cli"
+	"github.com/cosmos/ethermint/x/evm/keeper"
 	"github.com/cosmos/ethermint/x/evm/types"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/gorilla/mux"
-	"github.com/spf13/cobra"
-	abci "github.com/tendermint/tendermint/abci/types"
 )
 
 var _ module.AppModuleBasic = AppModuleBasic{}
@@ -34,18 +36,18 @@ func (AppModuleBasic) RegisterCodec(cdc *codec.Codec) {
 
 // DefaultGenesis is json default structure
 func (AppModuleBasic) DefaultGenesis() json.RawMessage {
-	return types.ModuleCdc.MustMarshalJSON(DefaultGenesisState())
+	return types.ModuleCdc.MustMarshalJSON(types.DefaultGenesisState())
 }
 
 // ValidateGenesis is the validation check of the Genesis
 func (AppModuleBasic) ValidateGenesis(bz json.RawMessage) error {
-	var data GenesisState
+	var data types.GenesisState
 	err := types.ModuleCdc.UnmarshalJSON(bz, &data)
 	if err != nil {
 		return err
 	}
 	// Once json successfully marshalled, passes along to genesis.go
-	return ValidateGenesis(data)
+	return types.ValidateGenesis(data)
 }
 
 // RegisterRESTRoutes Registers rest routes
@@ -70,10 +72,10 @@ type AppModule struct {
 }
 
 // NewAppModule creates a new AppModule Object
-func NewAppModule(keeper Keeper) AppModule {
+func NewAppModule(k Keeper) AppModule {
 	return AppModule{
 		AppModuleBasic: AppModuleBasic{},
-		keeper:         keeper,
+		keeper:         k,
 	}
 }
 
@@ -102,42 +104,22 @@ func (am AppModule) QuerierRoute() string {
 
 // NewQuerierHandler sets up new querier handler for module
 func (am AppModule) NewQuerierHandler() sdk.Querier {
-	return NewQuerier(am.keeper)
+	return keeper.NewQuerier(am.keeper)
 }
 
 // BeginBlock function for module at start of each block
-func (am AppModule) BeginBlock(ctx sdk.Context, bl abci.RequestBeginBlock) {
-	// Consider removing this when using evm as module without web3 API
-	bloom := ethtypes.BytesToBloom(am.keeper.bloom.Bytes())
-	am.keeper.SetBlockBloomMapping(ctx, bloom, bl.Header.GetHeight()-1)
-	am.keeper.SetBlockHashMapping(ctx, bl.Header.LastBlockId.GetHash(), bl.Header.GetHeight()-1)
-	am.keeper.bloom = big.NewInt(0)
-	am.keeper.txCount.reset()
+func (am AppModule) BeginBlock(ctx sdk.Context, req abci.RequestBeginBlock) {
+	BeginBlock(am.keeper, ctx, req)
 }
 
 // EndBlock function for module at end of block
-func (am AppModule) EndBlock(ctx sdk.Context, _ abci.RequestEndBlock) []abci.ValidatorUpdate {
-	// Gas costs are handled within msg handler so costs should be ignored
-	ebCtx := ctx.WithBlockGasMeter(sdk.NewInfiniteGasMeter())
-
-	// Update account balances before committing other parts of state
-	am.keeper.csdb.UpdateAccounts()
-
-	// Commit state objects to KV store
-	_, err := am.keeper.csdb.WithContext(ebCtx).Commit(true)
-	if err != nil {
-		panic(err)
-	}
-
-	// Clear accounts cache after account data has been committed
-	am.keeper.csdb.ClearStateObjects()
-
-	return []abci.ValidatorUpdate{}
+func (am AppModule) EndBlock(ctx sdk.Context, req abci.RequestEndBlock) []abci.ValidatorUpdate {
+	return EndBlock(am.keeper, ctx, req)
 }
 
 // InitGenesis instantiates the genesis state
 func (am AppModule) InitGenesis(ctx sdk.Context, data json.RawMessage) []abci.ValidatorUpdate {
-	var genesisState GenesisState
+	var genesisState types.GenesisState
 	types.ModuleCdc.MustUnmarshalJSON(data, &genesisState)
 	return InitGenesis(ctx, am.keeper, genesisState)
 }

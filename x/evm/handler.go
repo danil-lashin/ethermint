@@ -7,34 +7,30 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	authutils "github.com/cosmos/cosmos-sdk/x/auth/client/utils"
 	emint "github.com/cosmos/ethermint/types"
 	"github.com/cosmos/ethermint/x/evm/types"
 
-	tm "github.com/tendermint/tendermint/types"
+	tmtypes "github.com/tendermint/tendermint/types"
 )
 
 // NewHandler returns a handler for Ethermint type messages.
-func NewHandler(keeper Keeper) sdk.Handler {
+func NewHandler(k Keeper) sdk.Handler {
 	return func(ctx sdk.Context, msg sdk.Msg) sdk.Result {
 		switch msg := msg.(type) {
-		case types.EthereumTxMsg:
-			return handleETHTxMsg(ctx, keeper, msg)
-		case *types.EmintMsg:
-			return handleEmintMsg(ctx, keeper, *msg)
+		case types.MsgEthereumTx:
+			return HandleMsgEthereumTx(ctx, k, msg)
+		case types.MsgEthermint:
+			return HandleMsgEthermint(ctx, k, msg)
 		default:
-			errMsg := fmt.Sprintf("Unrecognized ethermint Msg type: %v", msg.Type())
+			errMsg := fmt.Sprintf("unrecognized ethermint msg type: %v", msg.Type())
 			return sdk.ErrUnknownRequest(errMsg).Result()
 		}
 	}
 }
 
-// Handle an Ethereum specific tx
-func handleETHTxMsg(ctx sdk.Context, keeper Keeper, msg types.EthereumTxMsg) sdk.Result {
-	if err := msg.ValidateBasic(); err != nil {
-		return err.Result()
-	}
-
+// HandleMsgEthereumTx handles an Ethereum specific tx
+func HandleMsgEthereumTx(ctx sdk.Context, k Keeper, msg types.MsgEthereumTx) sdk.Result {
+	ctx = ctx.WithEventManager(sdk.NewEventManager())
 	// parse the chainID from a string to a base-10 integer
 	intChainID, ok := new(big.Int).SetString(ctx.ChainID(), 10)
 	if !ok {
@@ -44,16 +40,10 @@ func handleETHTxMsg(ctx sdk.Context, keeper Keeper, msg types.EthereumTxMsg) sdk
 	// Verify signature and retrieve sender address
 	sender, err := msg.VerifySig(intChainID)
 	if err != nil {
-		return emint.ErrInvalidSender(err.Error()).Result()
+		return sdk.ResultFromError(err)
 	}
 
-	// Encode transaction by default Tx encoder
-	txEncoder := authutils.GetTxEncoder(types.ModuleCdc)
-	txBytes, err := txEncoder(msg)
-	if err != nil {
-		return sdk.ErrInternal(err.Error()).Result()
-	}
-	txHash := tm.Tx(txBytes).Hash()
+	txHash := tmtypes.Tx(ctx.TxBytes()).Hash()
 	ethHash := common.BytesToHash(txHash)
 
 	st := types.StateTransition{
@@ -64,32 +54,67 @@ func handleETHTxMsg(ctx sdk.Context, keeper Keeper, msg types.EthereumTxMsg) sdk
 		Recipient:    msg.Data.Recipient,
 		Amount:       msg.Data.Amount,
 		Payload:      msg.Data.Payload,
-		Csdb:         keeper.csdb.WithContext(ctx),
+		Csdb:         k.CommitStateDB.WithContext(ctx),
 		ChainID:      intChainID,
 		THash:        &ethHash,
 		Simulate:     ctx.IsCheckTx(),
 	}
 	// Prepare db for logs
-	keeper.csdb.Prepare(ethHash, common.Hash{}, keeper.txCount.get())
-	keeper.txCount.increment()
+	k.CommitStateDB.Prepare(ethHash, common.Hash{}, k.TxCount)
+	k.TxCount++
 
-	bloom, res := st.TransitionCSDB(ctx)
-	if res.IsOK() {
-		keeper.bloom.Or(keeper.bloom, bloom)
+	// TODO: move to keeper
+	returnData, err := st.TransitionCSDB(ctx)
+	if err != nil {
+		return sdk.ResultFromError(err)
 	}
-	return res
+
+	// update block bloom filter
+	k.Bloom.Or(k.Bloom, returnData.Bloom)
+
+	// update transaction logs in KVStore
+	err = k.SetTransactionLogs(ctx, returnData.Logs, txHash)
+	if err != nil {
+		return sdk.ResultFromError(err)
+	}
+
+	ctx.EventManager().EmitEvents(sdk.Events{
+		sdk.NewEvent(
+			types.EventTypeEthereumTx,
+			sdk.NewAttribute(sdk.AttributeKeyAmount, msg.Data.Amount.String()),
+		),
+		sdk.NewEvent(
+			sdk.EventTypeMessage,
+			sdk.NewAttribute(sdk.AttributeKeyModule, types.AttributeValueCategory),
+			sdk.NewAttribute(sdk.AttributeKeySender, sender.String()),
+		),
+	})
+
+	if msg.Data.Recipient != nil {
+		ctx.EventManager().EmitEvent(
+			sdk.NewEvent(
+				types.EventTypeEthereumTx,
+				sdk.NewAttribute(types.AttributeKeyRecipient, msg.Data.Recipient.String()),
+			),
+		)
+	}
+
+	// set the events to the result
+	returnData.Result.Events = ctx.EventManager().Events()
+	return *returnData.Result
 }
 
-func handleEmintMsg(ctx sdk.Context, keeper Keeper, msg types.EmintMsg) sdk.Result {
-	if err := msg.ValidateBasic(); err != nil {
-		return err.Result()
-	}
-
+// HandleMsgEthermint handles a MsgEthermint
+func HandleMsgEthermint(ctx sdk.Context, k Keeper, msg types.MsgEthermint) sdk.Result {
+	ctx = ctx.WithEventManager(sdk.NewEventManager())
 	// parse the chainID from a string to a base-10 integer
 	intChainID, ok := new(big.Int).SetString(ctx.ChainID(), 10)
 	if !ok {
 		return emint.ErrInvalidChainID(fmt.Sprintf("invalid chainID: %s", ctx.ChainID())).Result()
 	}
+
+	txHash := tmtypes.Tx(ctx.TxBytes()).Hash()
+	ethHash := common.BytesToHash(txHash)
 
 	st := types.StateTransition{
 		Sender:       common.BytesToAddress(msg.From.Bytes()),
@@ -98,8 +123,9 @@ func handleEmintMsg(ctx sdk.Context, keeper Keeper, msg types.EmintMsg) sdk.Resu
 		GasLimit:     msg.GasLimit,
 		Amount:       msg.Amount.BigInt(),
 		Payload:      msg.Payload,
-		Csdb:         keeper.csdb.WithContext(ctx),
+		Csdb:         k.CommitStateDB.WithContext(ctx),
 		ChainID:      intChainID,
+		THash:        &ethHash,
 		Simulate:     ctx.IsCheckTx(),
 	}
 
@@ -109,9 +135,36 @@ func handleEmintMsg(ctx sdk.Context, keeper Keeper, msg types.EmintMsg) sdk.Resu
 	}
 
 	// Prepare db for logs
-	keeper.csdb.Prepare(common.Hash{}, common.Hash{}, keeper.txCount.get()) // Cannot provide tx hash
-	keeper.txCount.increment()
+	k.CommitStateDB.Prepare(ethHash, common.Hash{}, k.TxCount)
+	k.TxCount++
 
-	_, res := st.TransitionCSDB(ctx)
-	return res
+	returnData, err := st.TransitionCSDB(ctx)
+	if err != nil {
+		return sdk.ResultFromError(err)
+	}
+
+	ctx.EventManager().EmitEvents(sdk.Events{
+		sdk.NewEvent(
+			types.EventTypeEthermint,
+			sdk.NewAttribute(sdk.AttributeKeyAmount, msg.Amount.String()),
+		),
+		sdk.NewEvent(
+			sdk.EventTypeMessage,
+			sdk.NewAttribute(sdk.AttributeKeyModule, types.AttributeValueCategory),
+			sdk.NewAttribute(sdk.AttributeKeySender, msg.From.String()),
+		),
+	})
+
+	if msg.Recipient != nil {
+		ctx.EventManager().EmitEvent(
+			sdk.NewEvent(
+				types.EventTypeEthermint,
+				sdk.NewAttribute(types.AttributeKeyRecipient, msg.Recipient.String()),
+			),
+		)
+	}
+
+	// set the events to the result
+	returnData.Result.Events = ctx.EventManager().Events()
+	return *returnData.Result
 }

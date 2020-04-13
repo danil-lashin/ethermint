@@ -1,22 +1,10 @@
 package types
 
 import (
-	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/ethermint/utils"
 
 	ethcmn "github.com/ethereum/go-ethereum/common"
 )
-
-var cdc = codec.New()
-
-func init() {
-	RegisterAmino(cdc)
-}
-
-// RegisterAmino registers all crypto related types in the given (amino) codec.
-func RegisterAmino(cdc *codec.Codec) {
-	cdc.RegisterConcrete(EncodableTxData{}, "ethermint/EncodedMessage", nil)
-}
 
 // EncodableTxData implements the Ethereum transaction data structure. It is used
 // solely as intended in Ethereum abiding by the protocol.
@@ -38,12 +26,12 @@ type EncodableTxData struct {
 }
 
 func marshalAmino(td EncodableTxData) (string, error) {
-	bz, err := cdc.MarshalBinaryBare(td)
+	bz, err := ModuleCdc.MarshalBinaryBare(td)
 	return string(bz), err
 }
 
-func unmarshalAmino(td *EncodableTxData, text string) (err error) {
-	return cdc.UnmarshalBinaryBare([]byte(text), td)
+func unmarshalAmino(td *EncodableTxData, text string) error {
+	return ModuleCdc.UnmarshalBinaryBare([]byte(text), td)
 }
 
 // MarshalAmino defines custom encoding scheme for TxData
@@ -67,11 +55,11 @@ func (td TxData) MarshalAmino() (string, error) {
 }
 
 // UnmarshalAmino defines custom decoding scheme for TxData
-func (td *TxData) UnmarshalAmino(text string) (err error) {
+func (td *TxData) UnmarshalAmino(text string) error {
 	e := new(EncodableTxData)
-	err = unmarshalAmino(e, text)
+	err := unmarshalAmino(e, text)
 	if err != nil {
-		return
+		return err
 	}
 
 	td.AccountNonce = e.AccountNonce
@@ -82,8 +70,9 @@ func (td *TxData) UnmarshalAmino(text string) (err error) {
 
 	price, err := utils.UnmarshalBigInt(e.Price)
 	if err != nil {
-		return
+		return err
 	}
+
 	if td.Price != nil {
 		td.Price.Set(price)
 	} else {
@@ -92,8 +81,9 @@ func (td *TxData) UnmarshalAmino(text string) (err error) {
 
 	amt, err := utils.UnmarshalBigInt(e.Amount)
 	if err != nil {
-		return
+		return err
 	}
+
 	if td.Amount != nil {
 		td.Amount.Set(amt)
 	} else {
@@ -102,8 +92,9 @@ func (td *TxData) UnmarshalAmino(text string) (err error) {
 
 	v, err := utils.UnmarshalBigInt(e.V)
 	if err != nil {
-		return
+		return err
 	}
+
 	if td.V != nil {
 		td.V.Set(v)
 	} else {
@@ -112,8 +103,9 @@ func (td *TxData) UnmarshalAmino(text string) (err error) {
 
 	r, err := utils.UnmarshalBigInt(e.R)
 	if err != nil {
-		return
+		return err
 	}
+
 	if td.R != nil {
 		td.R.Set(r)
 	} else {
@@ -122,15 +114,16 @@ func (td *TxData) UnmarshalAmino(text string) (err error) {
 
 	s, err := utils.UnmarshalBigInt(e.S)
 	if err != nil {
-		return
+		return err
 	}
+
 	if td.S != nil {
 		td.S.Set(s)
 	} else {
 		td.S = s
 	}
 
-	return
+	return nil
 }
 
 // TODO: Implement JSON marshaling/ unmarshaling for this type
