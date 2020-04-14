@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -49,10 +47,9 @@ contain valid denominations. Accounts may optionally be supplied with vesting pa
 			config.SetRoot(viper.GetString(cli.HomeFlag))
 
 			addr, err := sdk.AccAddressFromBech32(args[0])
-			inBuf := bufio.NewReader(cmd.InOrStdin())
 			if err != nil {
 				// attempt to lookup address from Keybase if no address was provided
-				kb, err := keys.NewKeyringFromDir(viper.GetString(flagClientHome), inBuf)
+				kb, err := keys.NewKeyBaseFromDir(viper.GetString(flagClientHome))
 				if err != nil {
 					return err
 				}

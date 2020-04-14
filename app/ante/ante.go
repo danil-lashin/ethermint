@@ -57,7 +57,7 @@ func NewAnteHandler(ak auth.AccountKeeper, sk types.SupplyKeeper) sdk.AnteHandle
 			return ethAnteHandler(ctx, ak, sk, &castTx, sim)
 
 		default:
-			return ctx, sdk.ErrInternal(fmt.Sprintf("transaction type invalid: %T", tx))
+			return ctx, sdkerrors.Wrap(sdkerrors.ErrTxDecode, fmt.Sprintf("transaction type invalid: %T", tx))
 		}
 	}
 }
@@ -125,7 +125,7 @@ func ethAnteHandler(
 				log := fmt.Sprintf("out of gas in location: %v; gasUsed: %d",
 					rType.Descriptor, ctx.GasMeter().GasConsumed(),
 				)
-				err = sdk.ErrOutOfGas(log)
+				err = sdkerrors.Wrap(sdkerrors.ErrOutOfGas, log)
 			default:
 				panic(r)
 			}
@@ -207,7 +207,7 @@ func validateSignature(ctx sdk.Context, ethTxMsg *evmtypes.MsgEthereumTx) (sdk.A
 	// validate sender/signature
 	signer, err := ethTxMsg.VerifySig(chainID)
 	if err != nil {
-		return nil, sdk.ErrUnauthorized(fmt.Sprintf("signature verification failed: %s", err))
+		return nil, sdkerrors.Wrap(sdkerrors.ErrUnauthorized, fmt.Sprintf("signature verification failed: %s", err))
 	}
 
 	return sdk.AccAddress(signer.Bytes()), nil
@@ -221,11 +221,11 @@ func validateSignature(ctx sdk.Context, ethTxMsg *evmtypes.MsgEthereumTx) (sdk.A
 func validateIntrinsicGas(ethTxMsg *evmtypes.MsgEthereumTx) error {
 	gas, err := ethcore.IntrinsicGas(ethTxMsg.Data.Payload, ethTxMsg.To() == nil, true)
 	if err != nil {
-		return sdk.ErrInternal(fmt.Sprintf("failed to compute intrinsic gas cost: %s", err))
+		return sdkerrors.Wrap(sdkerrors.ErrTxDecode, fmt.Sprintf("failed to compute intrinsic gas cost: %s", err))
 	}
 
 	if ethTxMsg.Data.GasLimit < gas {
-		return sdk.ErrInternal(
+		return sdkerrors.Wrap(sdkerrors.ErrTxDecode,
 			fmt.Sprintf("intrinsic gas too low: %d < %d", ethTxMsg.Data.GasLimit, gas),
 		)
 	}
@@ -243,7 +243,8 @@ func validateAccount(
 
 	// on InitChain make sure account number == 0
 	if ctx.BlockHeight() == 0 && acc.GetAccountNumber() != 0 {
-		return sdk.ErrInternal(
+		return sdkerrors.Wrap(
+			sdkerrors.ErrTxDecode,
 			fmt.Sprintf(
 				"invalid account number for height zero (got %d)", acc.GetAccountNumber(),
 			),
@@ -258,7 +259,7 @@ func validateAccount(
 	// validate sender has enough funds
 	balance := acc.GetCoins().AmountOf(emint.DenomDefault)
 	if balance.BigInt().Cmp(ethTxMsg.Cost()) < 0 {
-		return sdk.ErrInsufficientFunds(
+		return sdkerrors.Wrap(sdkerrors.ErrInsufficientFunds,
 			fmt.Sprintf("insufficient funds: %s < %s", balance, ethTxMsg.Cost()),
 		)
 	}
@@ -274,7 +275,7 @@ func checkNonce(
 	// current nonce).
 	seq := acc.GetSequence()
 	if ethTxMsg.Data.AccountNonce != seq {
-		return sdk.ErrInvalidSequence(
+		return sdkerrors.Wrap(sdkerrors.ErrInvalidSequence,
 			fmt.Sprintf("invalid nonce; got %d, expected %d", ethTxMsg.Data.AccountNonce, seq),
 		)
 	}
@@ -302,7 +303,7 @@ func ensureSufficientMempoolFees(ctx sdk.Context, ethTxMsg *evmtypes.MsgEthereum
 	// it is assumed that the minimum fees will only include the single valid denom
 	if !ctx.MinGasPrices().IsZero() && !allGTE {
 		// reject the transaction that does not meet the minimum fee
-		return sdk.ErrInsufficientFee(
+		return sdkerrors.Wrap(sdkerrors.ErrInsufficientFee,
 			fmt.Sprintf(
 				"insufficient fee, got: %q required: %q", fee, ctx.MinGasPrices(),
 			),

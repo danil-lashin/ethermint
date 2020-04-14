@@ -62,7 +62,7 @@ func (acc Account) SetBalance(amt sdk.Int) {
 	switch {
 	case diff.IsPositive():
 		// Increase coins to amount
-		coins = coins.Add(sdk.NewCoins(sdk.NewCoin(DenomDefault, diff)))
+		coins = coins.Add(sdk.NewCoins(sdk.NewCoin(DenomDefault, diff))...)
 	case diff.IsNegative():
 		// Decrease coins to amount
 		coins = coins.Sub(sdk.NewCoins(sdk.NewCoin(DenomDefault, diff.Neg())))

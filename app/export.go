@@ -92,7 +92,7 @@ func (app *EthermintApp) prepForZeroHeightGenesis(ctx sdk.Context, jailWhiteList
 		// donate any unwithdrawn outstanding reward fraction tokens to the community pool
 		scraps := app.DistrKeeper.GetValidatorOutstandingRewards(ctx, val.GetOperator())
 		feePool := app.DistrKeeper.GetFeePool(ctx)
-		feePool.CommunityPool = feePool.CommunityPool.Add(scraps)
+		feePool.CommunityPool = feePool.CommunityPool.Add(scraps...)
 		app.DistrKeeper.SetFeePool(ctx, feePool)
 
 		app.DistrKeeper.Hooks().AfterValidatorCreated(ctx, val.GetOperator())

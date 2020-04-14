@@ -1,6 +1,7 @@
 package app
 
 import (
+	os2 "github.com/tendermint/tendermint/libs/os"
 	"io"
 	"os"
 
@@ -30,7 +31,6 @@ import (
 	"github.com/cosmos/ethermint/x/evm"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	cmn "github.com/tendermint/tendermint/libs/common"
 	"github.com/tendermint/tendermint/libs/log"
 	dbm "github.com/tendermint/tm-db"
 )
@@ -164,7 +164,7 @@ func NewEthermintApp(
 	}
 
 	// init params keeper and subspaces
-	app.ParamsKeeper = params.NewKeeper(app.cdc, keys[params.StoreKey], tkeys[params.TStoreKey], params.DefaultCodespace)
+	app.ParamsKeeper = params.NewKeeper(app.cdc, keys[params.StoreKey], tkeys[params.TStoreKey])
 	app.subspaces[auth.ModuleName] = app.ParamsKeeper.Subspace(auth.DefaultParamspace)
 	app.subspaces[bank.ModuleName] = app.ParamsKeeper.Subspace(bank.DefaultParamspace)
 	app.subspaces[staking.ModuleName] = app.ParamsKeeper.Subspace(staking.DefaultParamspace)
@@ -179,14 +179,13 @@ func NewEthermintApp(
 		app.cdc, keys[auth.StoreKey], app.subspaces[auth.ModuleName], eminttypes.ProtoBaseAccount,
 	)
 	app.BankKeeper = bank.NewBaseKeeper(
-		app.AccountKeeper, app.subspaces[bank.ModuleName], bank.DefaultCodespace, app.ModuleAccountAddrs(),
+		app.AccountKeeper, app.subspaces[bank.ModuleName], app.ModuleAccountAddrs(),
 	)
 	app.SupplyKeeper = supply.NewKeeper(
 		app.cdc, keys[supply.StoreKey], app.AccountKeeper, app.BankKeeper, maccPerms,
 	)
 	stakingKeeper := staking.NewKeeper(
 		app.cdc, keys[staking.StoreKey], app.SupplyKeeper, app.subspaces[staking.ModuleName],
-		staking.DefaultCodespace,
 	)
 	app.MintKeeper = mint.NewKeeper(
 		app.cdc, keys[mint.StoreKey], app.subspaces[mint.ModuleName], &stakingKeeper,
@@ -194,11 +193,10 @@ func NewEthermintApp(
 	)
 	app.DistrKeeper = distr.NewKeeper(
 		app.cdc, keys[distr.StoreKey], app.subspaces[distr.ModuleName], &stakingKeeper,
-		app.SupplyKeeper, distr.DefaultCodespace, auth.FeeCollectorName, app.ModuleAccountAddrs(),
+		app.SupplyKeeper, auth.FeeCollectorName, app.ModuleAccountAddrs(),
 	)
 	app.SlashingKeeper = slashing.NewKeeper(
 		app.cdc, keys[slashing.StoreKey], &stakingKeeper, app.subspaces[slashing.ModuleName],
-		slashing.DefaultCodespace,
 	)
 	app.CrisisKeeper = crisis.NewKeeper(
 		app.subspaces[crisis.ModuleName], invCheckPeriod, app.SupplyKeeper, auth.FeeCollectorName,
@@ -214,7 +212,7 @@ func NewEthermintApp(
 		AddRoute(distr.RouterKey, distr.NewCommunityPoolSpendProposalHandler(app.DistrKeeper))
 	app.GovKeeper = gov.NewKeeper(
 		app.cdc, keys[gov.StoreKey], app.subspaces[gov.ModuleName], app.SupplyKeeper,
-		&stakingKeeper, gov.DefaultCodespace, govRouter,
+		&stakingKeeper, govRouter,
 	)
 
 	// register the staking hooks
@@ -277,7 +275,7 @@ func NewEthermintApp(
 	if loadLatest {
 		err := app.LoadLatestVersion(app.keys[bam.MainStoreKey])
 		if err != nil {
-			cmn.Exit(err.Error())
+			os2.Exit(err.Error())
 		}
 	}
 

@@ -173,6 +173,6 @@ func (st StateTransition) TransitionCSDB(ctx sdk.Context) (*ReturnData, error) {
 
 	returnData.Logs = logs
 	returnData.Bloom = bloomInt
-	returnData.Result = &sdk.Result{Data: resultData, GasUsed: gasConsumed}
+	returnData.Result = &sdk.Result{Data: resultData}
 	return returnData, nil
 }

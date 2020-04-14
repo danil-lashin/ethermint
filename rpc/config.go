@@ -61,7 +61,7 @@ func registerRoutes(rs *lcd.RestServer) {
 		keyringBackend := viper.GetString(flags.FlagKeyringBackend)
 		passphrase := ""
 		switch keyringBackend {
-		case flags.KeyringBackendOS:
+		case KeyringBackendOS:
 			break
 		case flags.KeyringBackendFile:
 			passphrase, err = input.GetPassword("Enter password to unlock key for RPC API: ", buf)
@@ -100,7 +100,7 @@ func registerRoutes(rs *lcd.RestServer) {
 }
 
 func unlockKeyFromNameAndPassphrase(accountName, passphrase string) (emintKey emintcrypto.PrivKeySecp256k1, err error) {
-	keybase, err := emintkeys.NewKeyringFromHomeFlag(os.Stdin)
+	keybase, err := emintkeys.NewKeyBaseFromDir(os.Stdin)
 	if err != nil {
 		return
 	}

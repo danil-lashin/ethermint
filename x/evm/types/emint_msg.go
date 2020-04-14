@@ -59,7 +59,7 @@ func (msg MsgEthermint) GetSignBytes() []byte {
 }
 
 // ValidateBasic runs stateless checks on the message
-func (msg MsgEthermint) ValidateBasic() sdk.Error {
+func (msg MsgEthermint) ValidateBasic() error {
 	if msg.Price.Sign() != 1 {
 		return types.ErrInvalidValue(fmt.Sprintf("Price must be positive: %x", msg.Price))
 	}
