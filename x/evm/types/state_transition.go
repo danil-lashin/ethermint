@@ -43,7 +43,7 @@ func (st StateTransition) TransitionCSDB(ctx sdk.Context) (*ReturnData, error) {
 
 	contractCreation := st.Recipient == nil
 
-	cost, err := core.IntrinsicGas(st.Payload, contractCreation, true)
+	cost, err := core.IntrinsicGas(st.Payload, contractCreation, true, true)
 	if err != nil {
 		return nil, fmt.Errorf("invalid intrinsic gas for transaction: %s", err.Error())
 	}

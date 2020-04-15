@@ -156,7 +156,7 @@ func ethAnteHandler(
 	// Set gas meter after ante handler to ignore gaskv costs
 	newCtx = auth.SetGasMeter(sim, ctx, ethTxMsg.Data.GasLimit)
 
-	gas, _ := ethcore.IntrinsicGas(ethTxMsg.Data.Payload, ethTxMsg.To() == nil, true)
+	gas, _ := ethcore.IntrinsicGas(ethTxMsg.Data.Payload, ethTxMsg.To() == nil, true, true)
 	newCtx.GasMeter().ConsumeGas(gas, "eth intrinsic gas")
 
 	// Increment sequence of sender
@@ -219,7 +219,7 @@ func validateSignature(ctx sdk.Context, ethTxMsg *evmtypes.MsgEthereumTx) (sdk.A
 // constant value of 21000 plus any cost inccured by additional bytes of data
 // supplied with the transaction.
 func validateIntrinsicGas(ethTxMsg *evmtypes.MsgEthereumTx) error {
-	gas, err := ethcore.IntrinsicGas(ethTxMsg.Data.Payload, ethTxMsg.To() == nil, true)
+	gas, err := ethcore.IntrinsicGas(ethTxMsg.Data.Payload, ethTxMsg.To() == nil, true, true)
 	if err != nil {
 		return sdk.ErrInternal(fmt.Sprintf("failed to compute intrinsic gas cost: %s", err))
 	}
