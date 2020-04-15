@@ -99,6 +99,8 @@ func HandleMsgEthereumTx(ctx sdk.Context, k Keeper, msg types.MsgEthereumTx) sdk
 		)
 	}
 
+	k.EmitCallback(ctx, msg)
+
 	// set the events to the result
 	returnData.Result.Events = ctx.EventManager().Events()
 	return *returnData.Result

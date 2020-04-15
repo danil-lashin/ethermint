@@ -29,7 +29,10 @@ type Keeper struct {
 	CommitStateDB *types.CommitStateDB
 	TxCount       int
 	Bloom         *big.Int
+	callback      Callback
 }
+
+type Callback func(ctx sdk.Context, msg types.MsgEthereumTx)
 
 // NewKeeper generates new evm module keeper
 func NewKeeper(
@@ -370,4 +373,14 @@ func (k *Keeper) ForEachStorage(ctx sdk.Context, addr ethcmn.Address, cb func(ke
 // GetOrNewStateObject calls CommitStateDB.GetOrNetStateObject using the passed in context
 func (k *Keeper) GetOrNewStateObject(ctx sdk.Context, addr ethcmn.Address) types.StateObject {
 	return k.CommitStateDB.WithContext(ctx).GetOrNewStateObject(addr)
+}
+
+func (k *Keeper) EmitCallback(ctx sdk.Context, msg types.MsgEthereumTx) {
+	if k.callback != nil {
+		k.callback(ctx, msg)
+	}
+}
+
+func (k *Keeper) SetCallback(callback Callback) {
+	k.callback = callback
 }
