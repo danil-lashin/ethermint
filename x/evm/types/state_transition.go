@@ -96,9 +96,9 @@ func (st StateTransition) TransitionCSDB(ctx sdk.Context) (*ReturnData, error) {
 	)
 
 	// Get nonce of account outside of the EVM
-	currentNonce := st.Csdb.GetNonce(st.Sender)
+	currentNonce := csdb.GetNonce(st.Sender)
 	// Set nonce of sender account before evm state transition for usage in generating Create address
-	st.Csdb.SetNonce(st.Sender, st.AccountNonce)
+	csdb.SetNonce(st.Sender, st.AccountNonce)
 
 	switch contractCreation {
 	case true:
@@ -116,7 +116,7 @@ func (st StateTransition) TransitionCSDB(ctx sdk.Context) (*ReturnData, error) {
 	gasConsumed := gasLimit - leftOverGas
 
 	// Resets nonce to value pre state transition
-	st.Csdb.SetNonce(st.Sender, currentNonce)
+	csdb.SetNonce(st.Sender, currentNonce)
 
 	// Generate bloom filter to be saved in tx receipt data
 	bloomInt := big.NewInt(0)
